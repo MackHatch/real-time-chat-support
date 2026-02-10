@@ -1,0 +1,80 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: support_chat
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'no']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      BACKEND_PORT: 3000
+      BACKEND_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/support_chat?schema=public
+      REDIS_URL: redis://redis:6379
+      ENABLE_SOCKET_REDIS_ADAPTER: 'true'
+      JWT_ACCESS_SECRET: change_me_in_prod
+      JWT_ACCESS_EXPIRES_IN: 15m
+      APP_ORIGIN: http://localhost
+      WIDGET_TOKEN_EXPIRES_IN: 1h
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - '3000:3000'
+    networks:
+      - app-network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_URL: http://backend:3000/api
+        VITE_SOCKET_URL: http://backend:3000
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - '80:80'
+    networks:
+      - app-network
+
+volumes:
+  postgres_data:
+
+networks:
+  app-network:
+    driver: bridge
+

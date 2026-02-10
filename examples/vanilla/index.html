@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Support Widget Demo</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 40px 20px;
+      line-height: 1.6;
+    }
+    h1 {
+      color: #1e293b;
+    }
+    .instructions {
+      background: #f1f5f9;
+      padding: 20px;
+      border-radius: 8px;
+      margin: 20px 0;
+    }
+    .instructions code {
+      background: #e2e8f0;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+    button {
+      background: #1e293b;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      margin: 5px;
+    }
+    button:hover {
+      background: #334155;
+    }
+  </style>
+</head>
+<body>
+  <h1>Support Widget Demo</h1>
+  
+  <div class="instructions">
+    <h2>Setup Instructions</h2>
+    <ol>
+      <li>Ensure backend is running on <code>http://localhost:3000</code></li>
+      <li>Ensure frontend is running on <code>http://localhost:5173</code></li>
+      <li>Run <code>npm run build:widget</code> in the frontend directory to build widget.js</li>
+      <li>Get an inbox ID from your database (or use the default inbox)</li>
+      <li>Update the <code>data-inbox-id</code> attribute in the script tag below</li>
+    </ol>
+  </div>
+
+  <h2>Demo Page</h2>
+  <p>This is a demo page showing the embedded support widget. The widget will appear as a button in the bottom-right corner.</p>
+  
+  <p>You can interact with the widget using the buttons below, or use the JavaScript API:</p>
+  
+  <div>
+    <button onclick="window.SupportWidget?.open()">Open Widget</button>
+    <button onclick="window.SupportWidget?.close()">Close Widget</button>
+    <button onclick="window.SupportWidget?.toggle()">Toggle Widget</button>
+  </div>
+
+  <h2>JavaScript API</h2>
+  <pre><code>// Initialize with options
+window.SupportWidget.init({
+  inboxId: 'your-inbox-id',
+  baseUrl: 'http://localhost:5173'
+});
+
+// Open the widget
+window.SupportWidget.open();
+
+// Close the widget
+window.SupportWidget.close();
+
+// Toggle the widget
+window.SupportWidget.toggle();
+
+// Destroy the widget
+window.SupportWidget.destroy();</code></pre>
+
+  <h2>Script Tag Attributes</h2>
+  <ul>
+    <li><code>data-inbox-id</code>: Optional inbox ID (can also be set via init() options)</li>
+    <li><code>data-base-url</code>: Optional base URL for the widget iframe (defaults to script origin)</li>
+  </ul>
+
+  <!-- 
+    Embed the widget script.
+    Update data-inbox-id with your actual inbox ID from the database.
+    
+    For development:
+    1. Run `npm run build:widget` in the frontend directory
+    2. This copies widget.js to frontend/public/widget.js
+    3. Vite dev server serves files from /public at the root
+    4. So widget.js is available at http://localhost:5173/widget.js
+    
+    In production, you would host widget.js on a CDN or your own server.
+  -->
+  <script 
+    src="http://localhost:5173/widget.js" 
+    data-base-url="http://localhost:5173"
+    data-inbox-id="">
+  </script>
+  
+  <!-- 
+    Note: To get an inbox ID, check your database or use the default inbox.
+    You can also initialize programmatically:
+    <script>
+      window.SupportWidget.init({
+        inboxId: 'your-inbox-id-here',
+        baseUrl: 'http://localhost:5173'
+      });
+    </script>
+  -->
+</body>
+</html>

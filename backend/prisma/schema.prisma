@@ -1,0 +1,150 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  AGENT
+}
+
+enum ConversationStatus {
+  OPEN
+  CLOSED
+}
+
+enum TicketStatus {
+  NEW
+  OPEN
+  PENDING
+  RESOLVED
+}
+
+enum TicketPriority {
+  LOW
+  MED
+  HIGH
+}
+
+enum MessageSenderType {
+  CUSTOMER
+  AGENT
+  SYSTEM
+}
+
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  passwordHash String
+  role         UserRole
+  name         String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  assignedConversations Conversation[] @relation("ConversationAssignedAgent")
+  createdTickets        Ticket[]       @relation("TicketCreatedByAgent")
+  assignedTickets       Ticket[]       @relation("TicketAssignedAgent")
+  messages              Message[]      @relation("MessageSenderUser")
+  events                EventLog[]     @relation("EventActorUser")
+}
+
+model Customer {
+  id         String    @id @default(uuid())
+  externalId String?   @unique
+  email      String?
+  name       String?
+  createdAt  DateTime  @default(now())
+
+  conversations Conversation[]
+  messages      Message[]      @relation("MessageSenderCustomer")
+}
+
+model Inbox {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  createdAt DateTime  @default(now())
+
+  conversations Conversation[]
+}
+
+model Conversation {
+  id                   String             @id @default(uuid())
+  inboxId              String
+  customerId           String
+  status               ConversationStatus @default(OPEN)
+  assignedAgentId      String?
+  assignedAt           DateTime?
+  lastMessageAt        DateTime?
+  lastCustomerMessageAt DateTime?
+  lastAgentMessageAt   DateTime?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  inbox         Inbox    @relation(fields: [inboxId], references: [id])
+  customer      Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  assignedAgent User?    @relation("ConversationAssignedAgent", fields: [assignedAgentId], references: [id])
+
+  messages Message[]
+  ticket   Ticket?
+  events   EventLog[]
+
+  @@index([inboxId, status, lastMessageAt])
+  @@index([assignedAgentId, status, lastMessageAt])
+  @@index([customerId, status])
+  @@index([status, assignedAgentId, lastMessageAt])
+  @@index([status, lastCustomerMessageAt])
+}
+
+model Message {
+  id               String             @id @default(uuid())
+  conversationId   String
+  senderType       MessageSenderType
+  senderUserId     String?
+  senderCustomerId String?
+  body             String
+  createdAt        DateTime           @default(now())
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderUser     User?        @relation("MessageSenderUser", fields: [senderUserId], references: [id], onDelete: SetNull)
+  senderCustomer Customer?    @relation("MessageSenderCustomer", fields: [senderCustomerId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt])
+}
+
+model Ticket {
+  id               String         @id @default(uuid())
+  conversationId   String         @unique
+  status           TicketStatus   @default(NEW)
+  priority         TicketPriority @default(MED)
+  title            String
+  createdByAgentId String?
+  assignedAgentId  String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  conversation  Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  createdByAgent User?      @relation("TicketCreatedByAgent", fields: [createdByAgentId], references: [id], onDelete: SetNull)
+  assignedAgent  User?      @relation("TicketAssignedAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
+
+  @@index([status, updatedAt])
+  @@index([assignedAgentId, status, updatedAt])
+}
+
+model EventLog {
+  id             String      @id @default(uuid())
+  type           String
+  conversationId String?
+  actorUserId    String?
+  metadata       Json
+  createdAt      DateTime    @default(now())
+
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  actorUser    User?         @relation("EventActorUser", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt])
+  @@index([type, createdAt])
+}

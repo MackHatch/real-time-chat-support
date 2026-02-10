@@ -1,0 +1,30 @@
+{
+  "name": "real-time-chat-support-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "concurrently \"npm run start:dev --workspace backend\" \"npm run dev --workspace frontend\"",
+    "dev:backend": "npm run start:dev --workspace backend",
+    "dev:frontend": "npm run dev --workspace frontend",
+    "install:all": "npm install --workspaces",
+    "build": "npm run build --workspace backend && npm run build --workspace frontend",
+    "db:up": "docker-compose up -d",
+    "db:down": "docker-compose down -v",
+    "db:reset": "tsx scripts/reset-db.ts",
+    "test:e2e": "npm run db:reset && npm run dev:backend & npm run dev:frontend & sleep 10 && npm run test:e2e --workspace frontend"
+  },
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "dependencies": {
+    "concurrently": "^9.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
+  }
+}
+

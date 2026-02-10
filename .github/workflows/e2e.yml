@@ -1,0 +1,129 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: support_chat
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install --workspaces
+
+      - name: Generate Prisma client
+        working-directory: backend
+        run: npm run prisma:generate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/support_chat?schema=public
+
+      - name: Run database migrations
+        working-directory: backend
+        run: npm run prisma:deploy
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/support_chat?schema=public
+
+      - name: Seed database
+        working-directory: backend
+        run: npm run prisma:seed
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/support_chat?schema=public
+
+      - name: Build backend
+        working-directory: backend
+        run: npm run build
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/support_chat?schema=public
+          JWT_ACCESS_SECRET: test_secret_key_min_8_chars
+          JWT_ACCESS_EXPIRES_IN: 15m
+          APP_ORIGIN: http://localhost:5173
+          REDIS_URL: redis://localhost:6379
+          WIDGET_TOKEN_EXPIRES_IN: 1h
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+        env:
+          VITE_API_URL: http://localhost:3000/api
+          VITE_SOCKET_URL: http://localhost:3000
+
+      - name: Start backend
+        working-directory: backend
+        run: npm run start:prod &
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/support_chat?schema=public
+          BACKEND_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/support_chat?schema=public
+          BACKEND_PORT: 3000
+          JWT_ACCESS_SECRET: test_secret_key_min_8_chars
+          JWT_ACCESS_EXPIRES_IN: 15m
+          APP_ORIGIN: http://localhost:5173
+          REDIS_URL: redis://localhost:6379
+          WIDGET_TOKEN_EXPIRES_IN: 1h
+
+      - name: Start frontend
+        working-directory: frontend
+        run: npm run dev &
+        env:
+          VITE_API_URL: http://localhost:3000/api
+          VITE_SOCKET_URL: http://localhost:3000
+
+      - name: Wait for services
+        run: |
+          npx wait-on http://localhost:3000/api || echo "Backend may not have health endpoint"
+          npx wait-on http://localhost:5173
+        timeout-minutes: 2
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npm run test:e2e:install
+
+      - name: Run E2E tests
+        working-directory: frontend
+        run: npm run test:e2e
+        env:
+          CI: true
+
+      - name: Upload Playwright trace
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-trace
+          path: frontend/test-results/
+          retention-days: 30
