@@ -8,6 +8,7 @@ import {
 } from './conversations.dto';
 import { conflict, forbidden, notFound } from '../common/http-errors';
 import { AgentChatGateway } from '../realtime/chat.gateway';
+import { claimConversationAtomic } from './claim-conversation';
 
 @Injectable()
 export class ConversationsService {
@@ -42,7 +43,6 @@ export class ConversationsService {
   }
 
   /**
-   * Computes if a conversation needs attention.
    * needsAttention = lastCustomerMessageAt != null AND (
    *   lastAgentMessageAt == null OR lastAgentMessageAt < lastCustomerMessageAt
    * )
@@ -60,149 +60,231 @@ export class ConversationsService {
     return lastAgentMessageAt < lastCustomerMessageAt; // Customer's last message is newer
   }
 
-  async list(userId: string, query: ConversationListQueryDto) {
-    const { page, pageSize, skip, take } = this.normalizePagination(query);
-
-    const where: Prisma.ConversationWhereInput = {
+  private buildListWhere(
+    userId: string,
+    query: ConversationListQueryDto,
+  ): Prisma.ConversationWhereInput {
+    return {
       ...(query.status ? { status: query.status as ConversationStatus } : {}),
       ...(query.inboxId ? { inboxId: query.inboxId } : {}),
-      ...this.buildAssignedFilter(query.assigned as AssignedFilter | undefined, userId),
+      ...this.buildAssignedFilter(
+        query.assigned as AssignedFilter | undefined,
+        userId,
+      ),
     };
+  }
 
-    // For needsAttention filter, we need to fetch more items and filter in memory
-    // because Prisma can't easily compare two columns in a where clause
-    const fetchSize = query.needsAttention === true ? take * 3 : take;
-    const fetchSkip = query.needsAttention === true ? 0 : skip;
+  /**
+   * SQL predicate for the needs-attention column comparison.
+   * Kept in the database so filtered pagination (skip/take + total) stays correct.
+   */
+  private needsAttentionSql(needsAttention: boolean): Prisma.Sql {
+    if (needsAttention) {
+      return Prisma.sql`(
+        "lastCustomerMessageAt" IS NOT NULL
+        AND (
+          "lastAgentMessageAt" IS NULL
+          OR "lastAgentMessageAt" < "lastCustomerMessageAt"
+        )
+      )`;
+    }
 
-    const rawItems = await this.prisma.conversation.findMany({
-      where,
+    return Prisma.sql`(
+      "lastCustomerMessageAt" IS NULL
+      OR (
+        "lastAgentMessageAt" IS NOT NULL
+        AND "lastAgentMessageAt" >= "lastCustomerMessageAt"
+      )
+    )`;
+  }
+
+  private buildListSqlWhere(
+    userId: string,
+    query: ConversationListQueryDto,
+  ): Prisma.Sql {
+    const conditions: Prisma.Sql[] = [];
+
+    if (query.status) {
+      conditions.push(
+        Prisma.sql`"status" = CAST(${query.status} AS "ConversationStatus")`,
+      );
+    }
+    if (query.inboxId) {
+      conditions.push(Prisma.sql`"inboxId" = ${query.inboxId}`);
+    }
+
+    const assigned = query.assigned as AssignedFilter | undefined;
+    if (assigned === 'me') {
+      conditions.push(Prisma.sql`"assignedAgentId" = ${userId}`);
+    } else if (assigned === 'unassigned') {
+      conditions.push(Prisma.sql`"assignedAgentId" IS NULL`);
+    }
+
+    if (query.needsAttention === true || query.needsAttention === false) {
+      conditions.push(this.needsAttentionSql(query.needsAttention));
+    }
+
+    if (conditions.length === 0) {
+      return Prisma.sql``;
+    }
+
+    return Prisma.sql`WHERE ${Prisma.join(conditions, ' AND ')}`;
+  }
+
+  private readonly listSelect = {
+    id: true,
+    status: true,
+    assignedAgentId: true,
+    lastMessageAt: true,
+    lastCustomerMessageAt: true,
+    lastAgentMessageAt: true,
+    createdAt: true,
+    updatedAt: true,
+    customer: {
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        externalId: true,
+      },
+    },
+    inbox: {
+      select: {
+        id: true,
+        name: true,
+      },
+    },
+    ticket: {
       select: {
         id: true,
         status: true,
-        assignedAgentId: true,
-        lastMessageAt: true,
-        lastCustomerMessageAt: true,
-        lastAgentMessageAt: true,
-        createdAt: true,
-        updatedAt: true,
-        customer: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            externalId: true,
-          },
-        },
-        inbox: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        ticket: {
-          select: {
-            id: true,
-            status: true,
-            priority: true,
-          },
-        },
-        assignedAgent: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
+        priority: true,
       },
-      orderBy: [
-        {
-          lastCustomerMessageAt: {
-            sort: 'desc',
-            nulls: 'last',
-          },
-        },
-        {
-          lastMessageAt: {
-            sort: 'desc',
-            nulls: 'last',
-          },
-        },
-      ],
-      skip: fetchSkip,
-      take: fetchSize,
-    });
+    },
+    assignedAgent: {
+      select: {
+        id: true,
+        name: true,
+        email: true,
+      },
+    },
+  } satisfies Prisma.ConversationSelect;
 
-    // Compute needsAttention for each item and filter if needed
-    const itemsWithAttention = rawItems.map((item) => ({
-      ...item,
-      needsAttention: this.computeNeedsAttention(
-        item.lastCustomerMessageAt,
-        item.lastAgentMessageAt,
-      ),
-    }));
+  async list(userId: string, query: ConversationListQueryDto) {
+    const { page, pageSize, skip, take } = this.normalizePagination(query);
+    const where = this.buildListWhere(userId, query);
+    const filterNeedsAttention =
+      query.needsAttention === true || query.needsAttention === false;
 
-    // Filter by needsAttention if requested
-    let filteredItems = itemsWithAttention;
-    if (query.needsAttention === true) {
-      filteredItems = itemsWithAttention.filter((item) => item.needsAttention);
-    } else if (query.needsAttention === false) {
-      filteredItems = itemsWithAttention.filter((item) => !item.needsAttention);
+    // When filtering by needsAttention, compare columns in SQL so later pages
+    // and totals stay correct (the old in-memory pageSize*3 approach did not).
+    if (filterNeedsAttention) {
+      const sqlWhere = this.buildListSqlWhere(userId, query);
+
+      const [idRows, countRows] = await Promise.all([
+        this.prisma.$queryRaw<Array<{ id: string }>>`
+          SELECT id
+          FROM "Conversation"
+          ${sqlWhere}
+          ORDER BY
+            "lastCustomerMessageAt" DESC NULLS LAST,
+            "lastMessageAt" DESC NULLS LAST
+          LIMIT ${take} OFFSET ${skip}
+        `,
+        this.prisma.$queryRaw<Array<{ count: bigint }>>`
+          SELECT COUNT(*)::bigint AS count
+          FROM "Conversation"
+          ${sqlWhere}
+        `,
+      ]);
+
+      const ids = idRows.map((row) => row.id);
+      const total = Number(countRows[0]?.count ?? 0n);
+
+      if (ids.length === 0) {
+        return { items: [], page, pageSize, total };
+      }
+
+      const rawItems = await this.prisma.conversation.findMany({
+        where: { id: { in: ids } },
+        select: this.listSelect,
+      });
+
+      const byId = new Map(rawItems.map((item) => [item.id, item]));
+      const items = ids
+        .map((id) => byId.get(id))
+        .filter((item): item is NonNullable<typeof item> => item != null)
+        .map((item) => ({
+          ...item,
+          needsAttention: this.computeNeedsAttention(
+            item.lastCustomerMessageAt,
+            item.lastAgentMessageAt,
+          ),
+        }));
+
+      return { items, page, pageSize, total };
     }
 
-    // Sort: needsAttention first, then by lastCustomerMessageAt, then lastMessageAt
-    filteredItems.sort((a, b) => {
-      // First sort by needsAttention (true first)
-      if (a.needsAttention !== b.needsAttention) {
-        return a.needsAttention ? -1 : 1;
-      }
-      // Then by lastCustomerMessageAt (newer first, nulls last)
-      if (a.lastCustomerMessageAt && b.lastCustomerMessageAt) {
-        const diff =
-          b.lastCustomerMessageAt.getTime() - a.lastCustomerMessageAt.getTime();
-        if (diff !== 0) return diff;
-      } else if (a.lastCustomerMessageAt) {
-        return -1;
-      } else if (b.lastCustomerMessageAt) {
-        return 1;
-      }
-      // Finally by lastMessageAt (newer first, nulls last)
-      if (a.lastMessageAt && b.lastMessageAt) {
-        return b.lastMessageAt.getTime() - a.lastMessageAt.getTime();
-      } else if (a.lastMessageAt) {
-        return -1;
-      } else if (b.lastMessageAt) {
-        return 1;
-      }
-      return 0;
-    });
+    const [rawItems, total] = await Promise.all([
+      this.prisma.conversation.findMany({
+        where,
+        select: this.listSelect,
+        orderBy: [
+          {
+            lastCustomerMessageAt: {
+              sort: 'desc',
+              nulls: 'last',
+            },
+          },
+          {
+            lastMessageAt: {
+              sort: 'desc',
+              nulls: 'last',
+            },
+          },
+        ],
+        skip,
+        take,
+      }),
+      this.prisma.conversation.count({ where }),
+    ]);
 
-    // Apply pagination after filtering
-    const paginatedItems = filteredItems.slice(skip, skip + take);
-
-    // For total count, we need to count all matching items
-    // If needsAttention filter is applied, we need to count filtered items
-    // For simplicity, we'll count all and then filter (acceptable for MVP)
-    const allItems = await this.prisma.conversation.findMany({
-      where,
-      select: {
-        lastCustomerMessageAt: true,
-        lastAgentMessageAt: true,
-      },
-    });
-
-    let total = allItems.length;
-    if (query.needsAttention === true || query.needsAttention === false) {
-      total = allItems.filter((item) => {
-        const needsAttention = this.computeNeedsAttention(
+    // Default inbox: annotate attention and prefer needing-attention rows on this page.
+    // Cross-page global ordering by needsAttention would need a derived column/index.
+    const items = rawItems
+      .map((item) => ({
+        ...item,
+        needsAttention: this.computeNeedsAttention(
           item.lastCustomerMessageAt,
           item.lastAgentMessageAt,
-        );
-        return query.needsAttention === true ? needsAttention : !needsAttention;
-      }).length;
-    }
+        ),
+      }))
+      .sort((a, b) => {
+        if (a.needsAttention !== b.needsAttention) {
+          return a.needsAttention ? -1 : 1;
+        }
+        if (a.lastCustomerMessageAt && b.lastCustomerMessageAt) {
+          const diff =
+            b.lastCustomerMessageAt.getTime() -
+            a.lastCustomerMessageAt.getTime();
+          if (diff !== 0) return diff;
+        } else if (a.lastCustomerMessageAt) {
+          return -1;
+        } else if (b.lastCustomerMessageAt) {
+          return 1;
+        }
+        if (a.lastMessageAt && b.lastMessageAt) {
+          return b.lastMessageAt.getTime() - a.lastMessageAt.getTime();
+        } else if (a.lastMessageAt) {
+          return -1;
+        } else if (b.lastMessageAt) {
+          return 1;
+        }
+        return 0;
+      });
 
     return {
-      items: paginatedItems,
+      items,
       page,
       pageSize,
       total,
@@ -276,70 +358,28 @@ export class ConversationsService {
 
   async claim(userId: string, conversationId: string) {
     const result = await this.prisma.$transaction(async (tx) => {
-      const convo = await tx.conversation.findUnique({
-        where: { id: conversationId },
-        select: {
-          id: true,
-          status: true,
-          assignedAgentId: true,
-        },
-      });
+      const claim = await claimConversationAtomic(tx, userId, conversationId);
 
-      if (!convo) {
-        notFound('CONVERSATION_NOT_FOUND', 'Conversation not found.');
+      if (!claim.ok) {
+        switch (claim.reason) {
+          case 'NOT_FOUND':
+            notFound('CONVERSATION_NOT_FOUND', 'Conversation not found.');
+          case 'CLOSED':
+            conflict('CONVERSATION_CLOSED', 'Conversation is already closed.');
+          case 'ALREADY_ASSIGNED':
+            conflict(
+              'CONVERSATION_ALREADY_ASSIGNED',
+              'Conversation is already assigned.',
+            );
+          default:
+            conflict(
+              'CONVERSATION_CLAIM_FAILED',
+              'Failed to claim conversation.',
+            );
+        }
       }
 
-      if (convo.status === ConversationStatus.CLOSED) {
-        conflict('CONVERSATION_CLOSED', 'Conversation is already closed.');
-      }
-
-      if (convo.assignedAgentId) {
-        conflict(
-          'CONVERSATION_ALREADY_ASSIGNED',
-          'Conversation is already assigned.',
-        );
-      }
-
-      const now = new Date();
-      const updated = await tx.conversation.update({
-        where: { id: conversationId },
-        data: {
-          assignedAgentId: userId,
-          assignedAt: now,
-        },
-        include: {
-          customer: true,
-          inbox: true,
-          assignedAgent: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-          ticket: {
-            select: {
-              id: true,
-              status: true,
-              priority: true,
-            },
-          },
-        },
-      });
-
-      await tx.eventLog.create({
-        data: {
-          type: 'conversation.claimed',
-          conversationId: updated.id,
-          actorUserId: userId,
-          metadata: {
-            previousAssignedAgentId: null,
-            newAssignedAgentId: userId,
-          },
-        },
-      });
-
-      return updated;
+      return claim.conversation;
     });
 
     return result;

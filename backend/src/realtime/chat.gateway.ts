@@ -27,6 +27,7 @@ import { sanitizeText } from '../common/sanitize';
 import { runWithSpan } from '../otel/tracing';
 import { hashId } from '../otel/hash';
 import { MetricsService } from '../metrics/metrics.service';
+import { claimConversationAtomic } from '../conversations/claim-conversation';
 
 type ChatSocket = Socket & {
   data: {
@@ -589,79 +590,42 @@ export class AgentChatGateway
         async () => {
           try {
       const updated = await this.prisma.$transaction(async (tx) => {
-        const convo = await tx.conversation.findUnique({
-          where: { id: payload.conversationId },
-          select: {
-            id: true,
-            status: true,
-            assignedAgentId: true,
-          },
-        });
+        const claim = await claimConversationAtomic(
+          tx,
+          agent.userId,
+          payload.conversationId,
+        );
 
-        if (!convo) {
-          this.emitError(
-            socket,
-            'CONVERSATION_NOT_FOUND',
-            'Conversation not found.',
-          );
+        if (!claim.ok) {
+          switch (claim.reason) {
+            case 'NOT_FOUND':
+              this.emitError(
+                socket,
+                'CONVERSATION_NOT_FOUND',
+                'Conversation not found.',
+              );
+            case 'CLOSED':
+              this.emitError(
+                socket,
+                'CONVERSATION_CLOSED',
+                'Conversation is already closed.',
+              );
+            case 'ALREADY_ASSIGNED':
+              this.emitError(
+                socket,
+                'CONVERSATION_ALREADY_ASSIGNED',
+                'Conversation is already assigned.',
+              );
+            default:
+              this.emitError(
+                socket,
+                'CONVERSATION_CLAIM_FAILED',
+                'Failed to claim conversation.',
+              );
+          }
         }
 
-        if (convo.status === ConversationStatus.CLOSED) {
-          this.emitError(
-            socket,
-            'CONVERSATION_CLOSED',
-            'Conversation is already closed.',
-          );
-        }
-
-        if (convo.assignedAgentId) {
-          this.emitError(
-            socket,
-            'CONVERSATION_ALREADY_ASSIGNED',
-            'Conversation is already assigned.',
-          );
-        }
-
-        const now = new Date();
-        const updatedConversation = await tx.conversation.update({
-          where: { id: payload.conversationId },
-          data: {
-            assignedAgentId: agent.userId,
-            assignedAt: now,
-          },
-          include: {
-            customer: true,
-            inbox: true,
-            assignedAgent: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-            ticket: {
-              select: {
-                id: true,
-                status: true,
-                priority: true,
-              },
-            },
-          },
-        });
-
-        await tx.eventLog.create({
-          data: {
-            type: 'conversation.claimed',
-            conversationId: updatedConversation.id,
-            actorUserId: agent.userId,
-            metadata: {
-              previousAssignedAgentId: null,
-              newAssignedAgentId: agent.userId,
-            },
-          },
-        });
-
-        return updatedConversation;
+        return claim.conversation;
       });
 
       this.emitConversation(payload.conversationId, 'conversation.updated', {
