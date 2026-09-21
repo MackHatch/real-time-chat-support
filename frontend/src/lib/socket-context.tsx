@@ -1,5 +1,6 @@
-import { createContext, useContext, useEffect, useMemo, ReactNode } from 'react';
-import { Socket } from 'socket.io-client';
+import { createContext, useContext, useMemo } from 'react';
+import type { ReactNode } from 'react';
+import type { Socket } from 'socket.io-client';
 import { useAuth } from './auth';
 import { getAgentSocket, disconnectAgentSocket } from './socket';
 
@@ -22,13 +23,8 @@ export function AgentSocketProvider({ children }: { children: ReactNode }) {
     return getAgentSocket(token);
   }, [token]);
 
-  useEffect(() => {
-    return () => {
-      if (socket) {
-        socket.disconnect();
-      }
-    };
-  }, [socket]);
+  // Do not disconnect the singleton on provider remount (StrictMode).
+  // Sign-out calls disconnectAgentSocket() explicitly.
 
   const value = useMemo(
     () => ({

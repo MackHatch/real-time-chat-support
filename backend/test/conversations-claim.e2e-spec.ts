@@ -1,10 +1,13 @@
 import { ExecutionContext, INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import request from 'supertest';
 import { ConversationsController } from '../src/conversations/conversations.controller';
 import { ConversationsService } from '../src/conversations/conversations.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { JwtAuthGuard } from '../src/auth/jwt-auth.guard';
+import { RateLimitInterceptor } from '../src/ratelimit/ratelimit.interceptor';
+import { RateLimitService } from '../src/ratelimit/ratelimit.service';
 
 describe('Conversations claim (e2e)', () => {
   let app: INestApplication;
@@ -28,6 +31,20 @@ describe('Conversations claim (e2e)', () => {
           provide: PrismaService,
           useValue: { user: { findUnique: jest.fn() } },
         },
+        {
+          provide: RateLimitService,
+          useValue: {
+            consume: jest.fn().mockResolvedValue({
+              allowed: true,
+              remaining: 10,
+              resetAtMs: Date.now() + 60_000,
+            }),
+          },
+        },
+        {
+          provide: APP_INTERCEPTOR,
+          useClass: RateLimitInterceptor,
+        },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -46,7 +63,9 @@ describe('Conversations claim (e2e)', () => {
   });
 
   afterAll(async () => {
-    await app.close();
+    if (app) {
+      await app.close();
+    }
   });
 
   beforeEach(() => {

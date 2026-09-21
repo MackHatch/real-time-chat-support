@@ -1,14 +1,17 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { env } from '../config/env';
-import { MetricsService } from '../metrics/metrics.service';
 
+/**
+ * Prisma 6 no longer supports $use middleware. Query timing is covered by
+ * OpenTelemetry Prisma instrumentation when OTEL_ENABLED=true.
+ */
 @Injectable()
 export class PrismaService
   extends PrismaClient
   implements OnModuleInit, OnModuleDestroy
 {
-  constructor(private readonly metrics?: MetricsService) {
+  constructor() {
     super({
       datasources: {
         db: {
@@ -16,46 +19,6 @@ export class PrismaService
         },
       },
     });
-
-    if (env.METRICS_ENABLED && this.metrics) {
-      this.$use(async (params, next) => {
-        const start = Date.now();
-        try {
-          const result = await next(params);
-          const durationMs = Date.now() - start;
-          const model = params.model ?? 'raw';
-          const action = params.action ?? 'unknown';
-
-          try {
-            this.metrics.prismaQueryTotal.inc({ model, action });
-            this.metrics.prismaQueryDurationMs.observe(
-              { model, action },
-              durationMs,
-            );
-          } catch {
-            // Ignore metrics errors
-          }
-
-          return result;
-        } catch (error) {
-          const durationMs = Date.now() - start;
-          const model = params.model ?? 'raw';
-          const action = params.action ?? 'unknown';
-
-          try {
-            this.metrics.prismaQueryTotal.inc({ model, action });
-            this.metrics.prismaQueryDurationMs.observe(
-              { model, action },
-              durationMs,
-            );
-          } catch {
-            // Ignore metrics errors
-          }
-
-          throw error;
-        }
-      });
-    }
   }
 
   async onModuleInit(): Promise<void> {
@@ -66,4 +29,3 @@ export class PrismaService
     await this.$disconnect();
   }
 }
-

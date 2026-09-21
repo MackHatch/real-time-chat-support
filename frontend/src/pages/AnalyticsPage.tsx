@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../lib/auth';
-import { useAnalyticsSummary, AnalyticsRange } from '../features/analytics/queries';
+import { useAnalyticsSummary } from '../features/analytics/queries';
+import type { AnalyticsRange } from '../features/analytics/queries';
 import { VolumeChart } from '../components/analytics/VolumeChart';
 import { buildUrl } from '../lib/api';
 

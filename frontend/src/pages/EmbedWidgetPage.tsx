@@ -1,4 +1,5 @@
-import { FormEvent, useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
+import type { FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { createCustomerSocket } from '../lib/socket';
 import type { Message } from '../lib/types';
@@ -163,6 +164,15 @@ export function EmbedWidgetPage() {
         setMessages((prev: UiMessage[]) =>
           prev.filter((m: UiMessage) => m.id !== optimistic.id),
         );
+        return;
+      }
+      if (ack?.message) {
+        setMessages((prev: UiMessage[]) => {
+          const withoutOptimistic = prev.filter((m) => m.id !== optimistic.id);
+          const exists = withoutOptimistic.some((m) => m.id === ack.message.id);
+          if (exists) return withoutOptimistic;
+          return [...withoutOptimistic, ack.message];
+        });
       }
     });
   };

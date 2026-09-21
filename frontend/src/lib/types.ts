@@ -48,6 +48,11 @@ export type Message = {
 
 export type ConversationDetail = ConversationListItem & {
   needsAttention: boolean;
+  assignedAgent?: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
 };
 
 export type ConversationDetailResponse = {

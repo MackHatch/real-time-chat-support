@@ -5,7 +5,7 @@ import { useConversationsList, useClaimConversation } from '../features/conversa
 import { useAgentSocket } from '../lib/socket-context';
 import { useRealtimeInvalidation } from '../features/realtime/useRealtimeInvalidation';
 import { timeAgo } from '../lib/time';
-import { ConversationListItem } from '../lib/types';
+import type { ConversationListItem } from '../lib/types';
 import { ApiError } from '../lib/api';
 
 function getCustomerDisplayName(customer: ConversationListItem['customer']): string {

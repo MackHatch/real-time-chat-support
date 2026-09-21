@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../../lib/api';
-import { TicketListItem, TicketDetail, TicketListResponse } from '../../lib/types';
+import type { TicketDetail, TicketListResponse } from '../../lib/types';
 
 type TicketListParams = {
   status?: string;

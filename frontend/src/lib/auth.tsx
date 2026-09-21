@@ -1,11 +1,14 @@
 import {
   createContext,
-  ReactNode,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
   useState,
 } from 'react';
+import type { ReactNode } from 'react';
+import { setUnauthorizedHandler } from './api';
+import { disconnectAgentSocket } from './socket';
 
 export type AuthUser = {
   id: string;
@@ -51,28 +54,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const setToken = (value: string | null) => {
+  const setToken = useCallback((value: string | null) => {
     setTokenState(value);
     if (value) {
       window.localStorage.setItem(ACCESS_TOKEN_KEY, value);
     } else {
       window.localStorage.removeItem(ACCESS_TOKEN_KEY);
     }
-  };
+  }, []);
 
-  const setUser = (value: AuthUser | null) => {
+  const setUser = useCallback((value: AuthUser | null) => {
     setUserState(value);
     if (value) {
       window.localStorage.setItem(USER_KEY, JSON.stringify(value));
     } else {
       window.localStorage.removeItem(USER_KEY);
     }
-  };
+  }, []);
 
-  const signOut = () => {
+  const signOut = useCallback(() => {
     setToken(null);
     setUser(null);
-  };
+    disconnectAgentSocket();
+  }, [setToken, setUser]);
+
+  // Expired/invalid JWTs must clear the session instead of spamming 401s while UI looks logged-in
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      setToken(null);
+      setUser(null);
+      disconnectAgentSocket();
+    });
+    return () => setUnauthorizedHandler(null);
+  }, [setToken, setUser]);
 
   const value: AuthContextValue = useMemo(
     () => ({
@@ -83,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser,
       signOut,
     }),
-    [token, user],
+    [token, user, setToken, setUser, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

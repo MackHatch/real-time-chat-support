@@ -15,6 +15,8 @@ This is a **customer support chat platform** similar to Intercom or Zendesk Chat
 
 Perfect for demonstrating full-stack development skills, real-time systems, and production-oriented practices.
 
+![Agent conversation with live customer chat](./docs/screenshots/agent-convo-realtime.png)
+
 ## Features
 
 ### Core Functionality
@@ -121,7 +123,7 @@ BACKEND_PORT=3000
 BACKEND_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/support_chat?schema=public
 REDIS_URL=redis://localhost:6379
 JWT_ACCESS_SECRET=change_me
-JWT_ACCESS_EXPIRES_IN=15m
+JWT_ACCESS_EXPIRES_IN=8h
 APP_ORIGIN=http://localhost:5173
 WIDGET_TOKEN_EXPIRES_IN=1h
 ```
@@ -166,18 +168,25 @@ The Swagger UI includes:
 
 ## Screenshots
 
-Portfolio screenshots are not committed yet (to avoid broken image placeholders on GitHub). After starting the app with demo data, capture these four views and save them under `docs/screenshots/`:
+### Real-time agent ↔ customer chat
 
-| File | View | URL |
-|------|------|-----|
-| `inbox.png` | Agent inbox | `/app/inbox` |
-| `conversation.png` | Active conversation | `/app/conversations/:id` |
-| `widget.png` | Customer widget | `/widget` |
-| `analytics.png` | Analytics dashboard | `/app/analytics` |
+| Agent view | Customer widget |
+|------------|-----------------|
+| ![Agent conversation](./docs/screenshots/agent-convo-realtime.png) | ![Customer conversation](./docs/screenshots/customer-convo-realtime.png) |
 
-Step-by-step capture instructions: [`docs/screenshots/README.md`](./docs/screenshots/README.md).
+### Needs attention & tickets
 
-Once the PNGs are in place, restore the image embeds in this section (and optionally a hero image near the top of the README).
+| Needs-attention banner | Ticket list |
+|------------------------|-------------|
+| ![Needs attention](./docs/screenshots/ticket-needs-attention.png) | ![Ticket management](./docs/screenshots/ticket-mgmt.png) |
+
+### Customer widget & analytics
+
+| Embeddable widget | Analytics dashboard |
+|-------------------|---------------------|
+| ![Customer chat widget](./docs/screenshots/customer-chat-widget.png) | ![Analytics](./docs/screenshots/analytics.png) |
+
+Capture notes: [`docs/screenshots/README.md`](./docs/screenshots/README.md).
 
 ## Development
 
@@ -238,8 +247,10 @@ Build and run the stack with the production Compose file (repo-root build contex
 docker compose -f docker-compose.prod.yml up --build
 ```
 
-- **Frontend**: http://localhost (nginx)
-- **Backend API**: http://localhost:3000/api
+- **Frontend**: http://localhost (nginx; proxies `/api` and `/socket.io` to the backend)
+- **Backend API**: http://localhost:3000/api (also reachable directly)
+
+The frontend image is built with same-origin `/api` URLs so the browser does not need to resolve the Docker service name `backend`. The backend container runs `prisma migrate deploy` on startup before listening.
 
 Override secrets and origins via environment variables / an `.env` file before deploying (especially `JWT_ACCESS_SECRET` and `APP_ORIGIN`). The backend image entrypoint is `dist/main.entry.js` so OpenTelemetry initializes before NestJS when tracing is enabled.
 

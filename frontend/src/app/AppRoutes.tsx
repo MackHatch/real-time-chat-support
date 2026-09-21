@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
+import type { ReactElement } from 'react';
 import { useAuth } from '../lib/auth';
 import { AgentLayout } from './layouts/AgentLayout';
 import { LoginPage } from '../pages/LoginPage';
@@ -10,7 +11,7 @@ import { AnalyticsPage } from '../pages/AnalyticsPage';
 import { WidgetPage } from '../pages/WidgetPage';
 import { EmbedWidgetPage } from '../pages/EmbedWidgetPage';
 
-function ProtectedRoute({ children }: { children: JSX.Element }) {
+function ProtectedRoute({ children }: { children: ReactElement }) {
   const { isAuthed } = useAuth();
 
   if (!isAuthed) {

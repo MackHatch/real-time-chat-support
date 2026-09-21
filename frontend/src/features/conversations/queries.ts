@@ -1,6 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiFetch, ApiError } from '../../lib/api';
-import { ConversationListResponse, ConversationListItem } from '../../lib/types';
+import { apiFetch } from '../../lib/api';
+import type {
+  ConversationListResponse,
+  ConversationListItem,
+} from '../../lib/types';
 
 type ConversationListParams = {
   status?: string;

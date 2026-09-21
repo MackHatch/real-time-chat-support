@@ -10,7 +10,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { Request } from 'express';
+import type { Request } from 'express';
 import { ConversationsService } from './conversations.service';
 import {
   ConversationListQueryDto,
@@ -18,7 +18,7 @@ import {
 } from './conversations.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ReqUser } from '../auth/request-user.decorator';
-import { JwtRequestUser } from '../auth/jwt.strategy';
+import type { JwtRequestUser } from '../auth/jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
 import { RateLimit } from '../ratelimit/ratelimit.decorator';
 import { env } from '../config/env';

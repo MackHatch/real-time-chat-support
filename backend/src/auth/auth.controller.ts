@@ -1,11 +1,11 @@
 import { Body, Controller, Get, HttpException, HttpStatus, Post, UseGuards, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { Request } from 'express';
+import type { Request } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto } from './auth.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { ReqUser } from './request-user.decorator';
-import { JwtRequestUser } from './jwt.strategy';
+import type { JwtRequestUser } from './jwt.strategy';
 import { RateLimit } from '../ratelimit/ratelimit.decorator';
 import { env } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';

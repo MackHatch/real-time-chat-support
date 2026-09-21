@@ -18,7 +18,7 @@ import {
 } from './tickets.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ReqUser } from '../auth/request-user.decorator';
-import { JwtRequestUser } from '../auth/jwt.strategy';
+import type { JwtRequestUser } from '../auth/jwt.strategy';
 
 @ApiTags('tickets')
 @ApiBearerAuth()

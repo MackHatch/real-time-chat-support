@@ -60,8 +60,9 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       args:
-        VITE_API_URL: http://backend:3000/api
-        VITE_SOCKET_URL: http://backend:3000
+        # Same-origin URLs; nginx proxies /api and /socket.io to the backend service
+        VITE_API_URL: /api
+        VITE_SOCKET_URL: ''
     restart: unless-stopped
     depends_on:
       backend:

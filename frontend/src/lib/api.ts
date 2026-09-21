@@ -14,6 +14,14 @@ export class ApiError extends Error {
 
 const baseUrl = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
 
+type UnauthorizedHandler = () => void;
+let unauthorizedHandler: UnauthorizedHandler | null = null;
+
+/** Register a handler invoked once per 401 so expired JWTs clear the session. */
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null) {
+  unauthorizedHandler = handler;
+}
+
 export function buildUrl(path: string): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   return `${baseUrl}${normalizedPath}`;
@@ -52,6 +60,10 @@ export async function apiFetch<T>(
 
   if (response.ok) {
     return data as T;
+  }
+
+  if (response.status === 401) {
+    unauthorizedHandler?.();
   }
 
   if (data && typeof data === 'object' && (data as any).error) {

@@ -477,7 +477,7 @@ export class AgentChatGateway
         });
       }
 
-      return { ok: true };
+      return { ok: true, message };
     }
 
     // customer sending
@@ -544,7 +544,7 @@ export class AgentChatGateway
       });
     }
 
-        return { ok: true };
+        return { ok: true, message };
       },
     );
     } finally {
@@ -812,7 +812,12 @@ export class AgentChatGateway
           this.emitError(socket, 'CONVERSATION_CLOSE_FAILED', 'Failed to close conversation.');
         }
       },
-    );
+      );
+    } finally {
+      if (endTimer) {
+        endTimer();
+      }
+    }
   }
 
   @SubscribeMessage('typing.start')

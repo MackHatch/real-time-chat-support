@@ -480,6 +480,22 @@ export class ConversationsService {
       return updated;
     });
 
+    // Notify realtime clients without blocking the HTTP response
+    // (Redis adapter / socket emit must never stall close)
+    const closedId = result.id;
+    const closedPayload = { conversation: result };
+    setImmediate(() => {
+      try {
+        const server = this.chatGateway?.server;
+        if (!server) return;
+        server
+          .to(`conversation:${closedId}`)
+          .emit('conversation.updated', closedPayload);
+      } catch {
+        // Realtime notify is best-effort; persistence already succeeded
+      }
+    });
+
     return result;
   }
 

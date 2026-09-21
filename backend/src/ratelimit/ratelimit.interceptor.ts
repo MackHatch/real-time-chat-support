@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { Reflector } from '@nestjs/core';
-import { Request } from 'express';
+import type { Request } from 'express';
 import { RateLimitService } from './ratelimit.service';
 import { RATE_LIMIT_KEY, RateLimitOptions } from './ratelimit.decorator';
 import { env } from '../config/env';

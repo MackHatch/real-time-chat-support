@@ -165,7 +165,11 @@ export class WidgetService {
       },
       {
         secret: env.JWT_ACCESS_SECRET,
-        expiresIn: env.WIDGET_TOKEN_EXPIRES_IN ?? '1h',
+        expiresIn: (env.WIDGET_TOKEN_EXPIRES_IN ?? '1h') as
+          | `${number}m`
+          | `${number}h`
+          | `${number}s`
+          | `${number}d`,
       },
     );
 

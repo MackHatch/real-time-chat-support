@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../../lib/api';
-import {
+import type {
   ConversationDetailResponse,
   Ticket,
 } from '../../lib/types';
@@ -35,10 +35,28 @@ export function useConversationClose(token: string | null) {
 
   return useMutation({
     mutationFn: (conversationId: string) =>
-      apiFetch(`/conversations/${conversationId}/close`, { method: 'POST' }, { token }),
+      apiFetch(
+        `/conversations/${conversationId}/close`,
+        { method: 'POST' },
+        { token },
+      ),
     onSuccess: (_data, conversationId) => {
-      queryClient.invalidateQueries({ queryKey: ['conversations'] });
-      queryClient.invalidateQueries({ queryKey: ['conversation', conversationId] });
+      // Optimistic local status so the Close button disappears immediately
+      queryClient.setQueryData(
+        ['conversation', conversationId],
+        (previous: ConversationDetailResponse | undefined) => {
+          if (!previous) return previous;
+          return {
+            ...previous,
+            conversation: {
+              ...previous.conversation,
+              status: 'CLOSED',
+            },
+          };
+        },
+      );
+      // Refresh inbox lists only — avoid refetching detail while navigating away
+      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
   });
 }

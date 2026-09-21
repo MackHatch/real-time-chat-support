@@ -1,6 +1,6 @@
 import { Body, Controller, Post, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { Request } from 'express';
+import type { Request } from 'express';
 import { WidgetService } from './widget.service';
 import { WidgetSessionDto } from './widget.dto';
 import { RateLimit } from '../ratelimit/ratelimit.decorator';

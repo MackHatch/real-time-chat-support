@@ -233,7 +233,7 @@ export class TicketsService {
       }
     }
 
-    const data: Prisma.TicketUpdateInput = {};
+    const data: Prisma.TicketUncheckedUpdateInput = {};
     const changed: Record<string, any> = {};
 
     if (dto.status && dto.status !== existing.status) {

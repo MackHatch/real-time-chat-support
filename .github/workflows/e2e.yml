@@ -77,6 +77,33 @@ jobs:
           REDIS_URL: redis://localhost:6379
           WIDGET_TOKEN_EXPIRES_IN: 1h
 
+      - name: Run backend unit tests
+        working-directory: backend
+        run: npm test
+        env:
+          BACKEND_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/support_chat?schema=public
+          JWT_ACCESS_SECRET: test_secret_key_min_8_chars
+          JWT_ACCESS_EXPIRES_IN: 15m
+          APP_ORIGIN: http://localhost:5173
+          REDIS_URL: redis://localhost:6379
+          WIDGET_TOKEN_EXPIRES_IN: 1h
+          METRICS_ENABLED: 'false'
+          OTEL_ENABLED: 'false'
+
+      - name: Run backend controller e2e tests
+        working-directory: backend
+        run: npm run test:e2e
+        env:
+          BACKEND_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/support_chat?schema=public
+          JWT_ACCESS_SECRET: test_secret_key_min_8_chars
+          JWT_ACCESS_EXPIRES_IN: 15m
+          APP_ORIGIN: http://localhost:5173
+          REDIS_URL: redis://localhost:6379
+          WIDGET_TOKEN_EXPIRES_IN: 1h
+          METRICS_ENABLED: 'false'
+          OTEL_ENABLED: 'false'
+          RATE_LIMIT_ENABLED: 'false'
+
       - name: Build frontend
         working-directory: frontend
         run: npm run build

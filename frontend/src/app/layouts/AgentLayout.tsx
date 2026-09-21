@@ -3,7 +3,6 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../lib/auth';
 import { apiFetch, ApiError } from '../../lib/api';
-import { disconnectAgentSocket } from '../../lib/socket';
 import { AgentSocketProvider } from '../../lib/socket-context';
 import { DemoTour } from '../../components/demo/DemoTour';
 import type { AuthUser } from '../../lib/auth';
@@ -18,26 +17,31 @@ export function AgentLayout() {
     }
   }, [token, navigate]);
 
-  useQuery({
+  // Always re-validate the JWT (even if user is cached) so expired tokens don't
+  // leave the UI "logged in" while every API call returns 401.
+  const meQuery = useQuery({
     queryKey: ['auth', 'me'],
     queryFn: () => apiFetch<{ user: AuthUser }>('/auth/me', {}, { token }),
-    enabled: Boolean(token) && !user,
+    enabled: Boolean(token),
     retry: false,
-    onSuccess: (data) => {
-      setUser(data.user);
-    },
-    onError: (err) => {
-      if (err instanceof ApiError && err.status === 401) {
-        signOut();
-        disconnectAgentSocket();
-        navigate('/login', { replace: true });
-      }
-    },
+    staleTime: 60_000,
   });
+
+  useEffect(() => {
+    if (meQuery.data?.user) {
+      setUser(meQuery.data.user);
+    }
+  }, [meQuery.data, setUser]);
+
+  useEffect(() => {
+    if (meQuery.error instanceof ApiError && meQuery.error.status === 401) {
+      signOut();
+      navigate('/login', { replace: true });
+    }
+  }, [meQuery.error, signOut, navigate]);
 
   const handleSignOut = () => {
     signOut();
-    disconnectAgentSocket();
     navigate('/login', { replace: true });
   };
 

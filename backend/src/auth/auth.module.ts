@@ -13,7 +13,10 @@ import { env } from '../config/env';
     PassportModule,
     JwtModule.register({
       secret: env.JWT_ACCESS_SECRET,
-      signOptions: { expiresIn: env.JWT_ACCESS_EXPIRES_IN },
+      signOptions: {
+        // Nest JWT typings expect ms.StringValue | number; env is a validated string like "15m"
+        expiresIn: env.JWT_ACCESS_EXPIRES_IN as `${number}m` | `${number}h` | `${number}s` | `${number}d`,
+      },
     }),
     PrismaModule,
     RateLimitModule,

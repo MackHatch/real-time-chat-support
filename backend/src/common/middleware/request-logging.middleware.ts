@@ -1,7 +1,7 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
-import { Request, Response, NextFunction } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import { randomUUID } from 'crypto';
-import { setSpanAttribute } from '../otel/tracing';
+import { setSpanAttribute } from '../../otel/tracing';
 
 @Injectable()
 export class RequestLoggingMiddleware implements NestMiddleware {
