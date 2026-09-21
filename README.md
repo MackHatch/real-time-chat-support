@@ -13,10 +13,6 @@ This is a **customer support chat platform** similar to Intercom or Zendesk Chat
 - **Analytics dashboard** with KPIs, throughput metrics, and CSV export
 - **Embeddable customer widget** that can be integrated into any website
 
-Perfect for demonstrating full-stack development skills, real-time systems, and production-oriented practices.
-
-![Agent conversation with live customer chat](./docs/screenshots/agent-convo-realtime.png)
-
 ## Features
 
 ### Core Functionality
@@ -185,8 +181,6 @@ The Swagger UI includes:
 | Embeddable widget | Analytics dashboard |
 |-------------------|---------------------|
 | ![Customer chat widget](./docs/screenshots/customer-chat-widget.png) | ![Analytics](./docs/screenshots/analytics.png) |
-
-Capture notes: [`docs/screenshots/README.md`](./docs/screenshots/README.md).
 
 ## Development
 
@@ -364,4 +358,4 @@ If `OTEL_EXPORTER_OTLP_ENDPOINT` is not set, traces are exported to the console 
 
 ## License
 
-UNLICENSED - Private project
+UNLICENSED — All rights reserved.
