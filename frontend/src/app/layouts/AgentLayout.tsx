@@ -8,7 +8,7 @@ import { DemoTour } from '../../components/demo/DemoTour';
 import type { AuthUser } from '../../lib/auth';
 
 export function AgentLayout() {
-  const { token, user, setUser, signOut } = useAuth();
+  const { token, setUser, signOut } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
