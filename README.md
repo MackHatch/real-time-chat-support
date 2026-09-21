@@ -15,19 +15,6 @@ This is a **customer support chat platform** similar to Intercom or Zendesk Chat
 
 ## Features
 
-### Core Functionality
-
-- ✅ **Real-time Chat**: Socket.IO-based bidirectional messaging with typing indicators
-- ✅ **Multi-Agent Support**: Assign/unassign conversations, agent queue management
-- ✅ **Needs Attention System**: Automatic detection of conversations waiting for agent response
-- ✅ **Ticket Management**: Create and track support tickets linked to conversations
-- ✅ **Analytics Dashboard**: KPIs, volume charts, response time metrics, CSV export
-- ✅ **Embeddable Widget**: One-line script integration for customer-facing chat
-
-### Design notes (scaling)
-
-- **Needs-attention filter**: Column comparison (`lastAgentMessageAt` vs `lastCustomerMessageAt`) is evaluated in SQL so filtered inbox pages and totals paginate correctly. The default (unfiltered) inbox still boosts needing-attention rows within the current page only; a durable global sort would use a maintained `needsAttention` column or expression index.
-
 ### Technical Highlights
 
 - **Backend**: NestJS (TypeScript), Prisma ORM, PostgreSQL, Redis, JWT auth, Socket.IO
@@ -36,6 +23,8 @@ This is a **customer support chat platform** similar to Intercom or Zendesk Chat
 - **Scalability**: Redis adapter for Socket.IO horizontal scaling
 - **Testing**: Jest unit/controller tests (claim races, auth, widget, rate limits) plus Playwright E2E with CI/CD
 - **Deployment**: Docker containers with health checks and production configs
+
+- **Needs-attention design**: SQL comparison of `lastAgentMessageAt` and `lastCustomerMessageAt` keeps filtered inbox pagination and totals correct. The unfiltered inbox prioritizes needs-attention rows within each page; global sorting would require a maintained `needsAttention` column or expression index.
 
 ## Quickstart
 
@@ -87,25 +76,25 @@ The seed script creates demo scenarios:
 
 ```
 .
-├── backend/          # NestJS backend
-│   ├── src/
-│   │   ├── auth/    # JWT authentication
-│   │   ├── conversations/  # Conversation management
-│   │   ├── tickets/        # Ticket system
-│   │   ├── realtime/        # Socket.IO gateway
-│   │   ├── widget/          # Customer widget API
-│   │   ├── analytics/       # Analytics endpoints
-│   │   ├── health/          # Health checks
-│   │   └── ratelimit/       # Rate limiting
-│   └── prisma/      # Database schema & migrations
-├── frontend/        # React frontend
-│   ├── src/
-│   │   ├── pages/   # Route pages
-│   │   ├── features/  # Feature modules
-│   │   ├── components/  # Reusable components
-│   │   └── lib/      # Utilities
-│   └── public/      # Static assets
-└── docs/            # Documentation & screenshots
+├── backend/          # NestJS backend
+│   ├── src/
+│   │   ├── auth/    # JWT authentication
+│   │   ├── conversations/  # Conversation management
+│   │   ├── tickets/        # Ticket system
+│   │   ├── realtime/        # Socket.IO gateway
+│   │   ├── widget/          # Customer widget API
+│   │   ├── analytics/       # Analytics endpoints
+│   │   ├── health/          # Health checks
+│   │   └── ratelimit/       # Rate limiting
+│   └── prisma/      # Database schema & migrations
+├── frontend/        # React frontend
+│   ├── src/
+│   │   ├── pages/   # Route pages
+│   │   ├── features/  # Feature modules
+│   │   ├── components/  # Reusable components
+│   │   └── lib/      # Utilities
+│   └── public/      # Static assets
+└── docs/            # Documentation & screenshots
 ```
 
 ## Environment Configuration
@@ -139,7 +128,7 @@ The customer chat widget can be embedded in any website with a single script tag
 
 ```html
 <script src="http://localhost:5173/widget.js"
-        data-base-url="http://localhost:5173"></script>
+        data-base-url="http://localhost:5173"></script>
 ```
 
 For production, replace `localhost:5173` with your frontend domain.
@@ -265,96 +254,35 @@ Key production features:
 - **CORS**: Strict origin validation
 - **JWT Authentication**: Secure token-based auth for agents and customers
 
-### Token storage (intentional SPA tradeoff)
+### Token storage
 
-Agent access tokens are stored in **`localStorage`** (`frontend/src/lib/auth.tsx`). That is common for portfolio/SPAs because it is simple, refresh-friendly, and easy to pass into Socket.IO `auth.token`.
+Agent access tokens are stored in `localStorage` for the current SPA implementation, making them accessible to JavaScript and therefore vulnerable to token theft if XSS occurs.
 
-**Risk:** any XSS in the agent UI can read the token and impersonate the agent until expiry.
+A production-hardened implementation would use **HttpOnly + Secure + SameSite cookies** or short-lived in-memory access tokens with refresh-token rotation, alongside a strict Content Security Policy.
 
-**Hardening options** (not implemented here on purpose):
-- Prefer **HttpOnly + Secure + SameSite** cookies for the session/refresh token so JavaScript cannot read it
-- Keep a **short-lived access token in memory** and rotate via a refresh endpoint
-- Pair either approach with a strict **Content-Security-Policy** and careful dependency hygiene
+Widget customer JWTs remain in memory for the page session; only the stable `widgetExternalId` is persisted for conversation continuity.
 
-Widget customer JWTs are held in React Query memory for the page session (only a stable `widgetExternalId` is persisted to `localStorage` for conversation continuity).
+## Observability
 
-## Observability & Tracing
+The backend includes optional **OpenTelemetry tracing** and **Prometheus metrics** for production-style observability.
 
-The backend includes **OpenTelemetry (OTel) tracing** for comprehensive observability:
+Instrumentation covers:
 
-### Enabling Tracing
+- **HTTP requests** and request latency
+- **Prisma database operations**
+- **Socket.IO events**, including connections, messaging, conversation claiming, and typing
+- **WebSocket throughput and rejected messages**
 
-Set environment variables in `backend/.env`:
+The local Docker stack includes an **OpenTelemetry Collector** and **Jaeger** for trace inspection. Prometheus-compatible metrics are exposed at `/api/metrics` when enabled.
+
+Observability is opt-in through environment configuration:
 
 ```bash
 OTEL_ENABLED=true
 OTEL_SERVICE_NAME=support-chat-backend
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+METRICS_ENABLED=true
 ```
-
-### Local Tracing Stack
-
-The project includes a Docker Compose setup with OTel Collector and Jaeger:
-
-```bash
-# Start tracing stack (along with postgres/redis)
-docker-compose up -d
-```
-
-This starts:
-- **OTel Collector** on port `4318` (OTLP HTTP receiver)
-- **Jaeger UI** on port `16686` (http://localhost:16686)
-
-### Viewing Traces
-
-1. **Enable tracing** in `backend/.env`:
-   ```bash
-   OTEL_ENABLED=true
-   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
-   ```
-
-2. **Restart the backend** to initialize OTel
-
-3. **Open Jaeger UI**: http://localhost:16686
-
-4. **Search for traces**:
-   - Service: `support-chat-backend`
-   - Filter by operation (e.g., `ws.message.send`, `GET /api/conversations`)
-
-### Metrics (Prometheus)
-
-The backend exposes Prometheus metrics at `/api/metrics` when `METRICS_ENABLED=true`:
-
-- **HTTP metrics**: Request counts and durations by method/route/status
-- **WebSocket metrics**: Connection counts, message counts, event durations
-- **Prisma metrics**: Query counts and durations by model/action
-- **Rejection metrics**: Counts of rejected messages by reason (rate_limited, validation_error, etc.)
-
-Default metrics (CPU, memory, etc.) are also collected with the `supportchat_` prefix.
-
-### What's Traced
-
-- **HTTP Requests**: All REST API endpoints (auto-instrumented)
-- **Prisma Queries**: Database operations with query details
-- **Socket.IO Events**: Manual spans for:
-  - `ws.connect` - Socket connections
-  - `ws.conversation.join` - Conversation room joins
-  - `ws.message.send` - Message sending
-  - `ws.conversation.claim` - Conversation claiming
-  - `ws.conversation.close` - Conversation closing
-  - `ws.typing.start/stop` - Typing indicators
-
-### Trace Attributes
-
-Each span includes relevant context:
-- `conversationId` - For conversation-related operations
-- `actorType` - `agent` or `customer`
-- `actorId` - User or customer ID
-- `http.request_id` - Correlates with request logging
-
-### Console Exporter (Dev)
-
-If `OTEL_EXPORTER_OTLP_ENDPOINT` is not set, traces are exported to the console for development debugging.
 
 ## License
 
