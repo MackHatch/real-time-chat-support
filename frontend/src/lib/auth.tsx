@@ -25,6 +25,10 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+// Agent JWT lives in localStorage for a simple SPA demo (survives refresh, easy Socket.IO auth).
+// Tradeoff: any XSS can read the token. A production hardening path would use HttpOnly + Secure
+// + SameSite cookies (or a short-lived memory access token + refresh cookie) and stricter CSP.
+// See README "Security Features" → Token storage.
 const ACCESS_TOKEN_KEY = 'accessToken';
 const USER_KEY = 'authUser';
 
