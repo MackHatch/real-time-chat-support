@@ -9,10 +9,10 @@ if (!existsSync(backendDir)) {
   process.exit(1);
 }
 
-const databaseUrl = process.env.DATABASE_URL || process.env.BACKEND_DATABASE_URL;
+const databaseUrl = process.env.BACKEND_DATABASE_URL;
 
 if (!databaseUrl) {
-  console.error('DATABASE_URL or BACKEND_DATABASE_URL must be set');
+  console.error('BACKEND_DATABASE_URL must be set');
   process.exit(1);
 }
 
@@ -25,7 +25,7 @@ try {
     stdio: 'inherit',
     env: {
       ...process.env,
-      DATABASE_URL: databaseUrl,
+      BACKEND_DATABASE_URL: databaseUrl,
     },
   });
 
