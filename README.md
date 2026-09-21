@@ -1,9 +1,6 @@
 # Real-time Chat Support Application
 
-A full-stack, production-ready customer support chat application (Intercom-lite) built with modern technologies. This monorepo includes a NestJS backend with Socket.IO real-time communication and a React frontend with an embeddable customer widget.
-
-![Inbox View](./docs/screenshots/inbox.png)
-*Agent inbox with conversation management*
+A full-stack, production-oriented customer support chat application (Intercom-lite) built with modern technologies. This monorepo includes a NestJS backend with Socket.IO real-time communication and a React frontend with an embeddable customer widget.
 
 ## What This Is
 
@@ -16,7 +13,7 @@ This is a **customer support chat platform** similar to Intercom or Zendesk Chat
 - **Analytics dashboard** with KPIs, throughput metrics, and CSV export
 - **Embeddable customer widget** that can be integrated into any website
 
-Perfect for demonstrating full-stack development skills, real-time systems, and production-ready practices.
+Perfect for demonstrating full-stack development skills, real-time systems, and production-oriented practices.
 
 ## Features
 
@@ -29,13 +26,17 @@ Perfect for demonstrating full-stack development skills, real-time systems, and 
 - ✅ **Analytics Dashboard**: KPIs, volume charts, response time metrics, CSV export
 - ✅ **Embeddable Widget**: One-line script integration for customer-facing chat
 
+### Design notes (scaling)
+
+- **Needs-attention filter**: Column comparison (`lastAgentMessageAt` vs `lastCustomerMessageAt`) is evaluated in SQL so filtered inbox pages and totals paginate correctly. The default (unfiltered) inbox still boosts needing-attention rows within the current page only; a durable global sort would use a maintained `needsAttention` column or expression index.
+
 ### Technical Highlights
 
 - **Backend**: NestJS (TypeScript), Prisma ORM, PostgreSQL, Redis, JWT auth, Socket.IO
 - **Frontend**: React 19, Vite, TanStack Query, Tailwind CSS, React Router
 - **Security**: Rate limiting, message sanitization, Helmet headers, audit logging
 - **Scalability**: Redis adapter for Socket.IO horizontal scaling
-- **Testing**: Playwright E2E tests with CI/CD integration
+- **Testing**: Jest unit/controller tests (claim races, auth, widget, rate limits) plus Playwright E2E with CI/CD
 - **Deployment**: Docker containers with health checks and production configs
 
 ## Quickstart
@@ -56,8 +57,9 @@ docker-compose up -d
 npm install
 
 # 3. Setup database and seed demo data
+# Requires BACKEND_DATABASE_URL in backend/.env (see Environment Configuration)
 cd backend
-npx prisma migrate dev
+npx prisma migrate deploy
 npx prisma db seed
 cd ..
 
@@ -112,6 +114,8 @@ The seed script creates demo scenarios:
 
 ### Backend (`.env` in `backend/`)
 
+Copy `backend/.env.example` to `backend/.env`, then adjust as needed:
+
 ```bash
 BACKEND_PORT=3000
 BACKEND_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/support_chat?schema=public
@@ -121,6 +125,8 @@ JWT_ACCESS_EXPIRES_IN=15m
 APP_ORIGIN=http://localhost:5173
 WIDGET_TOKEN_EXPIRES_IN=1h
 ```
+
+`BACKEND_DATABASE_URL` is the single database connection string used by both Prisma CLI and the NestJS app.
 
 ### Frontend (`.env` in `frontend/`)
 
@@ -160,16 +166,18 @@ The Swagger UI includes:
 
 ## Screenshots
 
-![Conversation View](./docs/screenshots/conversation.png)
-*Active conversation with message thread*
+Portfolio screenshots are not committed yet (to avoid broken image placeholders on GitHub). After starting the app with demo data, capture these four views and save them under `docs/screenshots/`:
 
-![Widget View](./docs/screenshots/widget.png)
-*Customer-facing chat widget*
+| File | View | URL |
+|------|------|-----|
+| `inbox.png` | Agent inbox | `/app/inbox` |
+| `conversation.png` | Active conversation | `/app/conversations/:id` |
+| `widget.png` | Customer widget | `/widget` |
+| `analytics.png` | Analytics dashboard | `/app/analytics` |
 
-![Analytics Dashboard](./docs/screenshots/analytics.png)
-*Analytics dashboard with KPIs and charts*
+Step-by-step capture instructions: [`docs/screenshots/README.md`](./docs/screenshots/README.md).
 
-See `docs/screenshots/README.md` for instructions on capturing screenshots.
+Once the PNGs are in place, restore the image embeds in this section (and optionally a hero image near the top of the README).
 
 ## Development
 
@@ -192,7 +200,10 @@ npm run dev:frontend
 ```bash
 cd backend
 
-# Run migrations
+# Apply committed migrations (preferred for clean checkouts / CI)
+npm run prisma:deploy
+
+# Create a new migration during development
 npm run prisma:migrate
 
 # Seed demo data
@@ -202,16 +213,35 @@ npm run prisma:seed
 npm run prisma:studio
 ```
 
+Prisma CLI and the Nest app both read `BACKEND_DATABASE_URL` (set it in `backend/.env`).
+
 ### Testing
 
 ```bash
-# E2E tests (requires backend + frontend running)
+# Backend unit tests (claim race, auth, widget session, rate limit, socket auth)
+npm test --workspace backend
+
+# Backend controller e2e (auth guard + claim wiring; no DB required)
+npm run test:e2e --workspace backend
+
+# Frontend Playwright E2E (requires backend + frontend + seeded DB)
 npm run test:e2e --workspace frontend
 ```
 
+Coverage includes concurrent conversation claiming, auth failures, unauthorized inbox access, widget session creation, and in-memory rate limiting.
+
 ## Production Deployment
 
-See the [Production Deployment](./README.md#production-deployment) section for Docker-based deployment instructions.
+Build and run the stack with the production Compose file (repo-root build context):
+
+```bash
+docker compose -f docker-compose.prod.yml up --build
+```
+
+- **Frontend**: http://localhost (nginx)
+- **Backend API**: http://localhost:3000/api
+
+Override secrets and origins via environment variables / an `.env` file before deploying (especially `JWT_ACCESS_SECRET` and `APP_ORIGIN`). The backend image entrypoint is `dist/main.entry.js` so OpenTelemetry initializes before NestJS when tracing is enabled.
 
 Key production features:
 - Multi-stage Docker builds
@@ -219,6 +249,7 @@ Key production features:
 - Non-root container users
 - Environment-based configuration
 - Redis-backed Socket.IO scaling
+- OpenTelemetry-ready backend entrypoint
 
 ## Security Features
 
@@ -228,6 +259,19 @@ Key production features:
 - **Audit Logging**: Comprehensive event logging for compliance
 - **CORS**: Strict origin validation
 - **JWT Authentication**: Secure token-based auth for agents and customers
+
+### Token storage (intentional SPA tradeoff)
+
+Agent access tokens are stored in **`localStorage`** (`frontend/src/lib/auth.tsx`). That is common for portfolio/SPAs because it is simple, refresh-friendly, and easy to pass into Socket.IO `auth.token`.
+
+**Risk:** any XSS in the agent UI can read the token and impersonate the agent until expiry.
+
+**Hardening options** (not implemented here on purpose):
+- Prefer **HttpOnly + Secure + SameSite** cookies for the session/refresh token so JavaScript cannot read it
+- Keep a **short-lived access token in memory** and rotate via a refresh endpoint
+- Pair either approach with a strict **Content-Security-Policy** and careful dependency hygiene
+
+Widget customer JWTs are held in React Query memory for the page session (only a stable `widgetExternalId` is persisted to `localStorage` for conversation continuity).
 
 ## Observability & Tracing
 
