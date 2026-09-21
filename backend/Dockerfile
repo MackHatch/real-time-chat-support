@@ -12,6 +12,9 @@ COPY backend ./backend
 
 WORKDIR /app/backend
 
+# Placeholder URL so `prisma generate` can resolve schema env(); runtime uses the real value
+ENV BACKEND_DATABASE_URL="postgresql://postgres:postgres@localhost:5432/support_chat?schema=public"
+
 # Build backend and generate Prisma client
 RUN npm run build && npm run prisma:generate
 
@@ -34,5 +37,5 @@ EXPOSE 3000
 
 USER appuser
 
-CMD ["node", "dist/main.js"]
+CMD ["node", "dist/main.entry.js"]
 
