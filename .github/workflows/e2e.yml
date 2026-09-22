@@ -113,7 +113,9 @@ jobs:
 
       - name: Start backend
         working-directory: backend
-        run: npm run start:prod &
+        run: |
+          npm run start:prod > /tmp/backend.log 2>&1 &
+          echo $! > /tmp/backend.pid
         env:
           BACKEND_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/support_chat?schema=public
           BACKEND_PORT: 3000
@@ -122,19 +124,29 @@ jobs:
           APP_ORIGIN: http://localhost:5173
           REDIS_URL: redis://localhost:6379
           WIDGET_TOKEN_EXPIRES_IN: 1h
+          METRICS_ENABLED: 'false'
+          OTEL_ENABLED: 'false'
 
       - name: Start frontend
         working-directory: frontend
-        run: npm run dev &
+        run: npm run dev > /tmp/frontend.log 2>&1 &
         env:
           VITE_API_URL: http://localhost:3000/api
           VITE_SOCKET_URL: http://localhost:3000
 
       - name: Wait for services
         run: |
-          npx wait-on http://localhost:3000/api || echo "Backend may not have health endpoint"
-          npx wait-on http://localhost:5173
-        timeout-minutes: 2
+          npx wait-on -t 60000 http://localhost:3000/api/health
+          npx wait-on -t 60000 http://localhost:5173
+        timeout-minutes: 3
+
+      - name: Dump service logs on failure
+        if: failure()
+        run: |
+          echo "===== backend.log ====="
+          cat /tmp/backend.log || true
+          echo "===== frontend.log ====="
+          cat /tmp/frontend.log || true
 
       - name: Install Playwright browsers
         working-directory: frontend
