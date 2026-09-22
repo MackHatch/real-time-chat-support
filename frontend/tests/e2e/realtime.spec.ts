@@ -13,7 +13,6 @@ test('customer ↔ agent realtime messaging', async ({ browser }) => {
   const widgetPage = await widgetContext.newPage();
 
   try {
-    // Dismiss demo tour if present so it doesn't intercept clicks
     await agentPage.addInitScript(() => {
       window.localStorage.setItem('showDemoTour', 'false');
     });
@@ -25,8 +24,19 @@ test('customer ↔ agent realtime messaging', async ({ browser }) => {
     await agentPage.getByTestId('login-submit').click();
     await expect(agentPage).toHaveURL(/\/app\/inbox/);
 
-    // Step 2: Customer starts a widget session and sends a unique message
+    // Step 2: Customer widget session — capture conversationId so the agent
+    // opens the exact thread (avoids inbox filter races with seeded demos).
+    const sessionResponsePromise = widgetPage.waitForResponse(
+      (res) =>
+        res.url().includes('/widget/session') &&
+        res.request().method() === 'POST' &&
+        res.ok(),
+    );
     await widgetPage.goto('/widget');
+    const sessionResponse = await sessionResponsePromise;
+    const session = (await sessionResponse.json()) as { conversationId: string };
+    expect(session.conversationId).toBeTruthy();
+
     await expect(widgetPage.getByTestId('widget-message-input')).toBeEnabled({
       timeout: 15_000,
     });
@@ -36,18 +46,8 @@ test('customer ↔ agent realtime messaging', async ({ browser }) => {
       widgetPage.getByTestId('widget-message-list').getByText(uniqueMessage),
     ).toBeVisible({ timeout: 15_000 });
 
-    // Step 3: Open the newest unassigned conversation via a fresh REST load.
-    // Default filter is "Assigned to me" (seed demo); widget chats are unassigned.
-    // Avoid socket-debounce races by navigating with the filter in the URL.
-    await agentPage.goto('/app/inbox?assigned=unassigned');
-    await expect(agentPage.getByTestId('convo-list')).toBeVisible({
-      timeout: 15_000,
-    });
-
-    const firstConversation = agentPage.getByTestId(/^convo-item-/).first();
-    await expect(firstConversation).toBeVisible({ timeout: 15_000 });
-    await firstConversation.click();
-
+    // Step 3: Agent opens that conversation directly
+    await agentPage.goto(`/app/conversations/${session.conversationId}`);
     await expect(agentPage.getByTestId('message-list')).toBeVisible({
       timeout: 15_000,
     });

@@ -12,29 +12,46 @@ function getCustomerDisplayName(customer: ConversationListItem['customer']): str
   return customer.name || customer.email || customer.externalId || customer.id;
 }
 
+function parseAssignedFilter(
+  value: string | null,
+): 'me' | 'unassigned' | 'all' {
+  if (value === 'unassigned' || value === 'all') return value;
+  return 'me';
+}
+
 export function InboxPage() {
   const { token } = useAuth();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const socket = useAgentSocket();
-  const [assignedFilter, setAssignedFilter] = useState<'me' | 'unassigned' | 'all'>('me');
+  // Initialize from the URL so the first fetch matches ?assigned=… (no me→unassigned race)
+  const [assignedFilter, setAssignedFilter] = useState<'me' | 'unassigned' | 'all'>(
+    () => parseAssignedFilter(searchParams.get('assigned')),
+  );
   const [needsAttentionFilter, setNeedsAttentionFilter] = useState<boolean | undefined>(
-    undefined,
+    () => (searchParams.get('needsAttention') === 'true' ? true : undefined),
   );
   const [page, setPage] = useState(1);
   const pageSize = 20;
 
-  // Read query params on mount
   useEffect(() => {
-    const assigned = searchParams.get('assigned');
-    if (assigned === 'unassigned' || assigned === 'all') {
-      setAssignedFilter(assigned);
-    }
-    const needsAttention = searchParams.get('needsAttention');
-    if (needsAttention === 'true') {
-      setNeedsAttentionFilter(true);
-    }
+    setAssignedFilter(parseAssignedFilter(searchParams.get('assigned')));
+    setNeedsAttentionFilter(
+      searchParams.get('needsAttention') === 'true' ? true : undefined,
+    );
   }, [searchParams]);
+
+  const setAssigned = (next: 'me' | 'unassigned' | 'all') => {
+    setAssignedFilter(next);
+    setPage(1);
+    const params = new URLSearchParams(searchParams);
+    if (next === 'me') {
+      params.delete('assigned');
+    } else {
+      params.set('assigned', next);
+    }
+    setSearchParams(params, { replace: true });
+  };
 
   const { data, isLoading, error } = useConversationsList(
     {
@@ -83,10 +100,7 @@ export function InboxPage() {
         <div className="flex gap-2 border-b border-slate-800">
           <button
             type="button"
-            onClick={() => {
-              setAssignedFilter('me');
-              setPage(1);
-            }}
+            onClick={() => setAssigned('me')}
             data-testid="inbox-toggle-assigned"
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               assignedFilter === 'me'
@@ -98,10 +112,7 @@ export function InboxPage() {
           </button>
           <button
             type="button"
-            onClick={() => {
-              setAssignedFilter('unassigned');
-              setPage(1);
-            }}
+            onClick={() => setAssigned('unassigned')}
             data-testid="inbox-toggle-unassigned"
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               assignedFilter === 'unassigned'
@@ -113,10 +124,7 @@ export function InboxPage() {
           </button>
           <button
             type="button"
-            onClick={() => {
-              setAssignedFilter('all');
-              setPage(1);
-            }}
+            onClick={() => setAssigned('all')}
             data-testid="inbox-toggle-all"
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               assignedFilter === 'all'
