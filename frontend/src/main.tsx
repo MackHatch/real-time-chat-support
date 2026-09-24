@@ -9,6 +9,13 @@ import { AppRoutes } from './app/AppRoutes';
 
 const queryClient = new QueryClient();
 
+// Playwright sets navigator.webdriver; keep the floating RQ button out of e2e
+// so it cannot intercept clicks on the conversation composer.
+const showReactQueryDevtools =
+  import.meta.env.DEV &&
+  typeof navigator !== 'undefined' &&
+  !navigator.webdriver;
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
@@ -17,7 +24,9 @@ createRoot(document.getElementById('root')!).render(
           <AppRoutes />
         </BrowserRouter>
       </AuthProvider>
-      <ReactQueryDevtools initialIsOpen={false} />
+      {showReactQueryDevtools ? (
+        <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
+      ) : null}
     </QueryClientProvider>
   </StrictMode>,
 );

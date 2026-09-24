@@ -14,8 +14,12 @@ test('agent can claim an unassigned conversation from the inbox', async ({
 
   const claimButton = page.getByTestId(/^convo-claim-/).first();
   await claimButton.waitFor({ state: 'visible', timeout: 10000 });
-  await claimButton.click();
+  // Pin this conversation — other unassigned rows (e.g. from realtime e2e)
+  // must not make `.first()` rematch a different Claim button after click.
+  const claimTestId = await claimButton.getAttribute('data-testid');
+  expect(claimTestId).toBeTruthy();
+  const pinnedClaim = page.getByTestId(claimTestId!);
+  await pinnedClaim.click();
 
-  // After claim, conversation should leave the unassigned filter or claim control disappears
-  await expect(claimButton).toBeHidden({ timeout: 10000 });
+  await expect(pinnedClaim).toBeHidden({ timeout: 10000 });
 });

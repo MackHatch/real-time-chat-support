@@ -8,7 +8,11 @@ export type MessageBubbleProps = {
 
 export function MessageBubble({ message, isOwn }: MessageBubbleProps) {
   return (
-    <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
+    <div
+      className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
+      data-message-body={message.body}
+      data-optimistic={message.__optimistic ? 'true' : 'false'}
+    >
       <div
         className={`max-w-xs rounded-lg px-3 py-2 text-sm ${
           isOwn ? 'bg-slate-200 text-slate-900' : 'bg-slate-800 text-slate-100'

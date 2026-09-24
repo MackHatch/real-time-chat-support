@@ -42,12 +42,19 @@ test('customer ↔ agent realtime messaging', async ({ browser }) => {
     });
     await widgetPage.getByTestId('widget-message-input').fill(uniqueMessage);
     await widgetPage.getByTestId('widget-send').click();
+    // Wait until the socket ack replaces the optimistic row so the agent
+    // GET /conversations/:id will include the persisted message.
     await expect(
-      widgetPage.getByTestId('widget-message-list').getByText(uniqueMessage),
+      widgetPage.locator(
+        `[data-message-body="${uniqueMessage}"][data-optimistic="false"]`,
+      ),
     ).toBeVisible({ timeout: 15_000 });
 
     // Step 3: Agent opens that conversation directly
     await agentPage.goto(`/app/conversations/${session.conversationId}`);
+    await expect(agentPage).toHaveURL(
+      new RegExp(`/app/conversations/${session.conversationId}`),
+    );
     await expect(agentPage.getByTestId('message-list')).toBeVisible({
       timeout: 15_000,
     });

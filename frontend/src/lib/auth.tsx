@@ -35,24 +35,27 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 const ACCESS_TOKEN_KEY = 'accessToken';
 const USER_KEY = 'authUser';
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setTokenState] = useState<string | null>(null);
-  const [user, setUserState] = useState<AuthUser | null>(null);
+function readStoredToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return window.localStorage.getItem(ACCESS_TOKEN_KEY);
+}
 
-  useEffect(() => {
-    const storedToken = window.localStorage.getItem(ACCESS_TOKEN_KEY);
-    const storedUser = window.localStorage.getItem(USER_KEY);
-    if (storedToken) {
-      setTokenState(storedToken);
-    }
-    if (storedUser) {
-      try {
-        setUserState(JSON.parse(storedUser));
-      } catch {
-        // Invalid stored user, ignore
-      }
-    }
-  }, []);
+function readStoredUser(): AuthUser | null {
+  if (typeof window === 'undefined') return null;
+  const raw = window.localStorage.getItem(USER_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as AuthUser;
+  } catch {
+    return null;
+  }
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  // Hydrate synchronously so hard navigations (refresh / Playwright goto)
+  // do not briefly see isAuthed=false and bounce /login → /app/inbox.
+  const [token, setTokenState] = useState<string | null>(() => readStoredToken());
+  const [user, setUserState] = useState<AuthUser | null>(() => readStoredUser());
 
   const setToken = useCallback((value: string | null) => {
     setTokenState(value);
